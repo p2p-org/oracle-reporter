@@ -6,7 +6,7 @@
     "@google-cloud/bigquery": "6.2.0",
     "@types/express": "4.17.17",
     "@types/fs-extra": "9.0.13",
-    "axios": "1.4.0",
+    "axios": "1.6.0",
     "csv-parse": "5.4.0",
     "dotenv": "14.2.0",
     "ethers": "5.5.3",

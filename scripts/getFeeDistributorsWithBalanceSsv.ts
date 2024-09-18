@@ -3,6 +3,7 @@ import {getBalance} from "./helpers/getBalance";
 import {ethers} from "ethers";
 import {FeeDistributorToWithdraw} from "./models/FeeDistributorToWithdraw";
 import {getP2pSsvProxyAddresses} from "./ssv/getP2pSsvProxyAddresses";
+import {getP2pSsvProxyAddresses_3_1} from "./ssv/getP2pSsvProxyAddresses_3_1";
 import {getSsvPubKeysPerProxy} from "./ssv/getSsvPubKeysPerProxy";
 import {
     getSsvFeeRecipientAddressesWithTimestampsPerProxy
@@ -18,6 +19,8 @@ export async function getFeeDistributorsWithBalanceSsv() {
     const periods: {recipientAddress: string, from: Date, to: Date | null, pubkeys: string[]}[] = []
 
     const proxyAddresses = await getP2pSsvProxyAddresses()
+    const proxyAddresses_3_1 = await getP2pSsvProxyAddresses_3_1()
+    proxyAddresses.push(...proxyAddresses_3_1)
 
     for (const proxyAddress of proxyAddresses) {
         const feeRecipientAddressesWithTimestamps = await getSsvFeeRecipientAddressesWithTimestampsPerProxy(proxyAddress)

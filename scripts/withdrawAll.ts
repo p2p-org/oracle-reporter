@@ -30,7 +30,7 @@ export async function withdrawAll(feeDistributors: FeeDistributorToWithdraw[], t
                 if (!fd.identityParams) {
                     throw new Error('No identityParams for ' + fd.fdAddress)
                 }
-                const deployHash = await deployFeeDistributor(fd.identityParams)
+                const deployHash = await deployFeeDistributor(fd)
                 txHashesForFdAddresses.push({address: fd.fdAddress, hash: deployHash})
             }
 

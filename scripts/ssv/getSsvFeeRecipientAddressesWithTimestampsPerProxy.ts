@@ -2,7 +2,7 @@ import {logger} from "../helpers/logger";
 import {ethers} from "ethers";
 import {getSsvNetworkContract} from "../helpers/getSsvNetworkContract";
 
-export async function getSsvFeeRecipientAddressesWithTimestampsPerProxy(proxyAddress: string) {
+export async function getSsvFeeRecipientAddressesWithTimestampsPerProxy(proxyAddress: string) { // same for 3.1
     logger.info('getSsvFeeRecipientAddressesWithTimestampsPerProxy started for ' + proxyAddress)
 
     const ssvNetwork = getSsvNetworkContract()

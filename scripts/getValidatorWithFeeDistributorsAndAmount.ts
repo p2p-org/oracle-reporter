@@ -6,6 +6,7 @@ import fs from "fs";
 import {getFeeDistributorInputs} from "./getFeeDistributorInputs";
 import {getFeeDistributorsWithBalance} from "./getFeeDistributorsWithBalance";
 import { getFeeDistributorsWithBalanceSsv } from "./getFeeDistributorsWithBalanceSsv"
+import { getLastDistributionDate } from "./helpers/getLastDistributionDate"
 
 export async function getValidatorWithFeeDistributorsAndAmount() {
     logger.info('getValidatorWithFeeDistributorsAndAmount started')
@@ -27,6 +28,17 @@ export async function getValidatorWithFeeDistributorsAndAmount() {
 
     for (const fd of feeDistributorsWithBalance) {
         let fdAmount = 0
+
+        const lastDistributionDate = await getLastDistributionDate(fd.fdAddress)
+        if (lastDistributionDate) {
+            fd.periods = fd.periods.filter(p => p.endDate > lastDistributionDate)
+
+            for (const period of fd.periods) {
+                if (period.startDate < lastDistributionDate) {
+                    period.startDate = lastDistributionDate
+                }
+            }
+        }
 
         for (const period of fd.periods) {
             const pubkeys = period.pubkeys

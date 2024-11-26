@@ -14,7 +14,7 @@ export async function withdraw() {
         const fds = await getFeeDistributorsWithUpdatedAmountsFromAlreadySplitClRewards()
 
         const rewardData = fds.map(fd => {
-            return [fd.feeDistributor, fd.amount.toString()]
+            return [fd.fdAddress, fd.amount.toString()]
         })
 
         const tree = buildMerkleTreeForFeeDistributorAddress(rewardData)

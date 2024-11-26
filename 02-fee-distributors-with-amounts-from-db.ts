@@ -1,11 +1,11 @@
 import "dotenv/config"
 import {logger} from "./scripts/helpers/logger";
-import {getFeeDistributorsWithAmountsFromDb} from "./scripts/getFeeDistributorsWithAmountsFromDb";
+import { getValidatorWithFeeDistributorsAndAmount } from "./scripts/getValidatorWithFeeDistributorsAndAmount"
 
 async function main() {
     logger.info('02-fee-distributors-with-amounts-from-db started')
 
-    await getFeeDistributorsWithAmountsFromDb()
+    await getValidatorWithFeeDistributorsAndAmount()
 
     logger.info('02-fee-distributors-with-amounts-from-db finished')
 }

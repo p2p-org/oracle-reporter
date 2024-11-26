@@ -10,7 +10,7 @@ async function main() {
 
     const fds = await getFeeDistributorsWithUpdatedAmountsFromAlreadySplitClRewards()
 
-    const feeDistributorsAddresses = fds.map(fd => fd.feeDistributor)
+    const feeDistributorsAddresses = fds.map(fd => fd.fdAddress)
 
     await getAllBalances(feeDistributorsAddresses, 'balances-before')
 

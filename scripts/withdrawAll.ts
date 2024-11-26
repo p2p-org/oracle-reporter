@@ -7,9 +7,9 @@ import {getDatedJsonFilePath} from "./helpers/getDatedJsonFilePath";
 import fs from "fs";
 import {getIsContract} from "./helpers/getIsContract";
 import {deployFeeDistributor} from "./deployFeeDistributor";
-import {FeeDistributorWithAmount} from "./models/FeeDistributorWithAmount";
+import { FeeDistributorToWithdraw } from "./models/FeeDistributorToWithdraw"
 
-export async function withdrawAll(feeDistributors: FeeDistributorWithAmount[], tree: StandardMerkleTree<any[]>) {
+export async function withdrawAll(feeDistributors: FeeDistributorToWithdraw[], tree: StandardMerkleTree<any[]>) {
     logger.info('withdrawAll started')
 
     if (!process.env.MIN_BALANCE_TO_WITHDRAW_IN_GWEI) {
@@ -20,24 +20,28 @@ export async function withdrawAll(feeDistributors: FeeDistributorWithAmount[], t
 
     for (const fd of feeDistributors) {
         try {
-            const isDeployed = await getIsContract(fd.feeDistributor)
+            if (fd.fdAddress.toLowerCase() === '0xa136329Bb4c0Af09C5Ad20449E4eb8b60fE65F19'.toLowerCase()) {
+                throw new Error('Corrupted address 0xa136329Bb4c0Af09C5Ad20449E4eb8b60fE65F19')
+            }
+
+            const isDeployed = await getIsContract(fd.fdAddress)
 
             if (!isDeployed) {
                 if (!fd.identityParams) {
-                    throw new Error('No identityParams for ' + fd.feeDistributor)
+                    throw new Error('No identityParams for ' + fd.fdAddress)
                 }
-                const deployHash = await deployFeeDistributor(fd.identityParams)
-                txHashesForFdAddresses.push({address: fd.feeDistributor, hash: deployHash})
+                const deployHash = await deployFeeDistributor(fd)
+                txHashesForFdAddresses.push({address: fd.fdAddress, hash: deployHash})
             }
 
             let withdrawHash = ''
             const use4337 = getUse4337()
             if (use4337) {
-                withdrawHash = await withdrawErc4337(fd.feeDistributor, tree)
+                withdrawHash = await withdrawErc4337(fd.fdAddress, tree)
             } else {
-                withdrawHash = await withdrawTx(fd.feeDistributor, tree)
+                withdrawHash = await withdrawTx(fd.fdAddress, tree)
             }
-            txHashesForFdAddresses.push({address: fd.feeDistributor, hash: withdrawHash})
+            txHashesForFdAddresses.push({address: fd.fdAddress, hash: withdrawHash})
 
         } catch (error) {
             logger.error(error)

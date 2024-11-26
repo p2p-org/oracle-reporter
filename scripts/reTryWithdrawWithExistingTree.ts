@@ -13,9 +13,9 @@ export async function reTryWithdrawWithExistingTree() {
     console.log(path.dirname(process.argv[1]))
 
     // @ts-ignore
-    const fds = JSON.parse(fs.readFileSync(path.dirname(process.argv[1]) + '/reports/fee-distributors-with-legacy-already-split-amounts2024-03-01T07:43:48.600Z.json'))
+    const fds = JSON.parse(fs.readFileSync(path.dirname(process.argv[1]) + '/reports/fee-distributors-with-legacy-already-split-amounts2024-10-15T08:21:55.910Z.json'))
 
-    const merkleTreeFilePath = './reports/merkle-tree2024-03-01T07:43:48.600Z.json'
+    const merkleTreeFilePath = './reports/merkle-tree2024-10-15T08:21:55.910Z.json'
 
     // @ts-ignore
     const tree = StandardMerkleTree.load(JSON.parse(fs.readFileSync(merkleTreeFilePath)));

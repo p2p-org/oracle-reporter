@@ -5,6 +5,7 @@ import {ethers} from "ethers";
 import {predictFeeDistributorAddress} from "./predictFeeDistributorAddress";
 import {FeeDistributorToWithdraw} from "./models/FeeDistributorToWithdraw";
 import {getSeconds} from "./helpers/getSeconds";
+import { Period } from "./models/Period"
 
 export async function getFeeDistributorsWithBalance(feeDistributorInputs: FeeDistributorInput[]) {
     logger.info('getFeeDistributorsWithBalance started')
@@ -16,8 +17,7 @@ export async function getFeeDistributorsWithBalance(feeDistributorInputs: FeeDis
     const fdsWithoutBalance: {
         clientAddress: string,
         basisPoints: number,
-        start: Date,
-        end: Date
+        periods: Period[]
     }[] = []
 
     const feeDistributorsWithBalance: FeeDistributorToWithdraw[] = []
@@ -43,30 +43,22 @@ export async function getFeeDistributorsWithBalance(feeDistributorInputs: FeeDis
                 )
 
                 if (input.identityParams) {
-                    if (input.endDate > new Date("2024-01-31T20:20:00.000Z")) {
-                        fdsWithoutBalance.push({
-                            clientAddress: input.identityParams.clientConfig.recipient, basisPoints:
-                            input.identityParams.clientConfig.basisPoints,
-                            start: input.startDate,
-                            end: input.endDate
-                        })
-                    }
+                    fdsWithoutBalance.push({
+                        clientAddress: input.identityParams.clientConfig.recipient,
+                        basisPoints: input.identityParams.clientConfig.basisPoints,
+                        periods: input.periods
+                    })
                 }
 
                 continue
             }
 
             feeDistributorsWithBalance.push({
-                address: feeDistributorsAddress,
-
-                identityParams: input.identityParams,
-                pubkeys: input.pubkeys,
-
-                startDateIso: input.startDate,
-                endDateIso: input.endDate,
+                ...input,
 
                 balance,
-                newClientBasisPoints: null
+                newClientBasisPoints: null,
+                amount: 0
             })
         } catch (error) {
             logger.error(error)
@@ -76,50 +68,34 @@ export async function getFeeDistributorsWithBalance(feeDistributorInputs: FeeDis
     if (fdsWithoutBalance.length) {
         logger.info(fdsWithoutBalance.length + ' fdsWithoutBalance')
 
-        fdsWithoutBalance.sort((a, b) => a.start.getTime() - b.start.getTime())
-
         for (const fdWithoutBalance of fdsWithoutBalance) {
-            const fdsWithBalance = feeDistributorsWithBalance.filter(
+            const fdsWithBalanceForClient = feeDistributorsWithBalance.filter(
                 fd => fd.identityParams?.clientConfig.recipient === fdWithoutBalance.clientAddress
             )
+            const fdsWithoutBalanceForClient = fdsWithoutBalance.filter(
+              fd => fd.clientAddress === fdWithoutBalance.clientAddress && fd !== fdWithoutBalance
+            )
 
-            if (fdsWithBalance.length) {
-                fdsWithBalance.sort((a, b) => a.startDateIso.getTime() - b.startDateIso.getTime())
-
-                const closestFdWithBalance = fdsWithBalance.find(
-                    fdWithBalance => fdWithBalance.startDateIso > fdWithoutBalance.start
+            if (fdsWithBalanceForClient.length) {
+                const fdWithMaxBalance = fdsWithBalanceForClient.reduce(
+                  (max, fd) =>
+                    fd.balance.gt(max.balance) ? fd : max,
+                  fdsWithBalanceForClient[0]
                 )
 
-                if (closestFdWithBalance && closestFdWithBalance.identityParams) {
-                    const fdsWithoutBalanceInBetween = fdsWithoutBalance.filter(
-                        fdWoBalance =>
-                            fdWoBalance.start > fdWithoutBalance.start && fdWoBalance.start < closestFdWithBalance.startDateIso
-                    )
+                if (fdWithMaxBalance.identityParams) {
+                    for (const period of fdWithoutBalance.periods) {
+                        if (fdWithMaxBalance.periods.some(p =>
+                          p.startDate.getTime() === period.startDate.getTime() &&
+                          p.endDate.getTime() === period.endDate.getTime() &&
+                          p.pubkeys.some(pk => period.pubkeys.some(ppk => ppk === pk))
+                        )) {
+                            continue
+                        }
 
-                    const totalSeconds =
-                        getSeconds(fdWithoutBalance.end) - getSeconds(fdWithoutBalance.start) +
-                        getSeconds(closestFdWithBalance.endDateIso!) - getSeconds(closestFdWithBalance.startDateIso) +
-                        fdsWithoutBalanceInBetween.reduce(
-                            (_, f) => _ + getSeconds(f.end) - getSeconds(f.start),
-                            0
-                        )
-
-                    const sumOfBasisPointsXseconds =
-                        (getSeconds(fdWithoutBalance.end) - getSeconds(fdWithoutBalance.start))
-                            * fdWithoutBalance.basisPoints +
-                        (getSeconds(closestFdWithBalance.endDateIso!) - getSeconds(closestFdWithBalance.startDateIso))
-                            * closestFdWithBalance.identityParams.clientConfig.basisPoints +
-                        fdsWithoutBalanceInBetween.reduce(
-                            (_, f) => _ + (getSeconds(f.end) - getSeconds(f.start)) * f.basisPoints,
-                            0
-                        )
-
-                    const weightedAvgBasisPoints = Math.floor(sumOfBasisPointsXseconds / totalSeconds)
-
-                    logger.info('weightedAvgBasisPoints for ' + closestFdWithBalance.address + ' is ' + weightedAvgBasisPoints)
-
-                    closestFdWithBalance.startDateIso = fdWithoutBalance.start
-                    closestFdWithBalance.newClientBasisPoints = weightedAvgBasisPoints
+                        fdWithMaxBalance.periods.push(period)
+                        fdWithMaxBalance.newClientBasisPoints = null // TODO: need a weighted average
+                    }
                 }
             }
         }

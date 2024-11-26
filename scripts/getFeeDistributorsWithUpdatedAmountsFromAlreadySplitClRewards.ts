@@ -2,30 +2,23 @@ import {getAlreadySplitClRewards} from "./getAlreadySplitClRewards";
 import {logger} from "./helpers/logger";
 import {getDatedJsonFilePath} from "./helpers/getDatedJsonFilePath";
 import fs from "fs";
-import {getFeeDistributorsWithAmountsFromDb} from "./getFeeDistributorsWithAmountsFromDb";
-import {FeeDistributorWithAmount} from "./models/FeeDistributorWithAmount";
+import { getValidatorWithFeeDistributorsAndAmount } from "./getValidatorWithFeeDistributorsAndAmount"
 
 export async function getFeeDistributorsWithUpdatedAmountsFromAlreadySplitClRewards() {
-    const feeDistributorsWithAmountsFromDb = await getFeeDistributorsWithAmountsFromDb()
+    const validatorWithFeeDistributorsAndAmounts = await getValidatorWithFeeDistributorsAndAmount()
 
-    logger.info(feeDistributorsWithAmountsFromDb.length + ' feeDistributorsWithAmountsFromDb found')
+    logger.info(validatorWithFeeDistributorsAndAmounts.length + ' validatorWithFeeDistributorsAndAmounts found')
 
-    const feeDistributorsWithUpdatedAmountsFromAlreadySplitClRewards: FeeDistributorWithAmount[] = []
-    for (const fd of feeDistributorsWithAmountsFromDb) {
+    for (const fd of validatorWithFeeDistributorsAndAmounts) {
         try {
-            const alreadySplitClRewards = await getAlreadySplitClRewards(fd.feeDistributor)
+            const alreadySplitClRewards = await getAlreadySplitClRewards(fd.fdAddress)
 
-            logger.info(fd.feeDistributor + ' amount before alreadySplitClRewards = ' + fd.amount)
-            logger.info(fd.feeDistributor + ' alreadySplitClRewards = ' + alreadySplitClRewards)
+            logger.info(fd.fdAddress + ' amount before alreadySplitClRewards = ' + fd.amount)
+            logger.info(fd.fdAddress + ' alreadySplitClRewards = ' + alreadySplitClRewards)
 
             const updatedAmount = fd.amount + alreadySplitClRewards
-
-            logger.info(fd.feeDistributor + ' amount after alreadySplitClRewards = ' + updatedAmount)
-
-            feeDistributorsWithUpdatedAmountsFromAlreadySplitClRewards.push({
-                ...fd,
-                amount: updatedAmount
-            })
+            logger.info(fd.fdAddress + ' amount after alreadySplitClRewards = ' + updatedAmount)
+            fd.amount = updatedAmount
         } catch (error) {
             logger.error(error)
         }
@@ -33,13 +26,13 @@ export async function getFeeDistributorsWithUpdatedAmountsFromAlreadySplitClRewa
 
     const filePath = getDatedJsonFilePath('fee-distributors-with-legacy-already-split-amounts')
     logger.info('Saving fee-distributors-with-legacy-already-split-amounts to ' + filePath)
-    fs.writeFileSync(filePath, JSON.stringify(feeDistributorsWithUpdatedAmountsFromAlreadySplitClRewards))
+    fs.writeFileSync(filePath, JSON.stringify(validatorWithFeeDistributorsAndAmounts))
     logger.info('fee-distributors-with-legacy-already-split-amounts saved')
 
     logger.info(
-        feeDistributorsWithUpdatedAmountsFromAlreadySplitClRewards.length
+      validatorWithFeeDistributorsAndAmounts.length
         + ' feeDistributors amount were updated'
     )
 
-    return feeDistributorsWithUpdatedAmountsFromAlreadySplitClRewards
+    return validatorWithFeeDistributorsAndAmounts
 }

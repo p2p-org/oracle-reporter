@@ -1,8 +1,10 @@
 import {logger} from "./helpers/logger";
 import {FeeDistributorInput} from "./models/FeeDistributorInput";
-import {getSessionsFromApi} from "./getSessionsFromApi";
-import {DepositManagerApiSession} from "./models/DepositManagerApiSession";
-import {getPubkeysForSessionFromApi} from "./getPubkeysForSessionFromApi";
+import {getFdAddressesWithPeriodsFromApi} from "./getFdAddressesWithPeriodsFromApi";
+import { ethers } from "ethers"
+import { Period } from "./models/Period"
+import { FdWithPeriodFromApi } from "./models/FdWithPeriodFromApi"
+import { getProposers } from "./getProposers"
 
 export async function getFeeDistributorInputs() {
     logger.info('getFeeDistributorInputs started')
@@ -11,109 +13,79 @@ export async function getFeeDistributorInputs() {
         throw new Error("No REFERENCE_FEE_DISTRIBUTOR in ENV")
     }
 
-    const sessionsFromApi = await getSessionsFromApi()
-    logger.info(sessionsFromApi.length + ' sessions from API')
+    const withManual = await getFdAddressesWithPeriodsFromApi()
+    logger.info(Object.keys(withManual).length + ' fd addresses with periods from API with manual')
 
-    const sessionsWithoutInvoices = sessionsFromApi.filter(d => d.address !== d.client_fee_recipient)
-    logger.info(sessionsWithoutInvoices.length + ' sessions without invoices')
-
-    const sessionsGroupedByClient = sessionsWithoutInvoices.reduce((acc: {[key: string]: DepositManagerApiSession[]}, item: DepositManagerApiSession) => {
-        const key = item.client_fee_recipient
-        if (!acc[key]) {
-            acc[key] = []
-        }
-        acc[key].push(item)
-        return acc
-    }, {})
+    const fdAddressesWithPeriodsFromApi = await filterManualSetup(withManual)
+    const fsAddresses = Object.keys(fdAddressesWithPeriodsFromApi)
+    logger.info(fsAddresses.length + ' fd addresses with periods from API')
 
     const now = new Date()
-    const feeDistributorInputs: FeeDistributorInput[] = []
 
-    for (const clientAddress of Object.keys(sessionsGroupedByClient)) {
-        const clientSessions = sessionsGroupedByClient[clientAddress]
+    const feeDistributorInputs: FeeDistributorInput[] = fsAddresses.map(fdAddress => {
+        const periodsFromApi = fdAddressesWithPeriodsFromApi[fdAddress]
 
-        clientSessions.sort((a, b) =>
-            new Date(a.activated_at).getTime() - new Date(b.activated_at).getTime()
-        );
+        const first = periodsFromApi[0]
 
-        for (const session of clientSessions) {
-            session.pubkeys = new Set(await getPubkeysForSessionFromApi(session.session_id))
+        const clientConfig = {
+            recipient: first.client_fee_recipient,
+            basisPoints: first.client_basis_points
         }
 
-        const fdsForPeriodForClient = squashPeriods(clientSessions)
-        fdsForPeriodForClient.sort((a, b) => new Date(a.activated_at).getTime() - new Date(b.activated_at).getTime())
+        const referrerConfig = {
+            recipient: first.referrer_fee_recipient,
+            basisPoints: first['referrer_basis_points'] as number || 0
+        }
 
-        const feeDistributorInputsForClient: FeeDistributorInput[] = fdsForPeriodForClient.map(d => {
+        const periods: Period[] = periodsFromApi.map(pa => ({
+            startDate: new Date(pa.activated_at),
 
-            const referrerConfig = {
-                recipient: d.referrer_fee_recipient,
-                // @ts-ignore
-                basisPoints: d['referrer_basis_points'] as number || 0
-            }
+            endDate: pa.deactivated_at
+              ? new Date(pa.deactivated_at)
+              : now,
 
-            logger.info(d.pubkeys.size + ' pubkeys for ' + d.client_fee_recipient)
+            pubkeys: pa.validators
+        })).filter(p => p.startDate < p.endDate)
 
-            let endDate = now
+        periods.sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
 
-            const sameClientFds = fdsForPeriodForClient.filter(
-                nd => nd.id !== d.id
-            )
+        return {
+            fdAddress: ethers.utils.getAddress(fdAddress),
 
-            if (sameClientFds.length) {
-                const laterFd = sameClientFds.find(
-                    fd => new Date(fd.activated_at) > new Date(d.activated_at)
-                )
+            identityParams: {
+                referenceFeeDistributor: process.env.REFERENCE_FEE_DISTRIBUTOR!,
+                clientConfig,
+                referrerConfig
+            },
 
-                if (laterFd) {
-                    endDate = new Date(laterFd.activated_at)
-                }
-            }
-
-            return {
-                fdAddress: d.address,
-
-                identityParams: {
-                    referenceFeeDistributor: process.env.REFERENCE_FEE_DISTRIBUTOR!,
-                    clientConfig: {recipient: d.client_fee_recipient, basisPoints: d.client_basis_points},
-                    referrerConfig
-                },
-
-                pubkeys: d.pubkeys,
-
-                startDate: new Date(d.activated_at) <= new Date("2024-01-31T20:20:00.000Z")
-                    ? new Date("2024-01-31T20:20:00.000Z")
-                    : new Date(d.activated_at),
-
-                endDate: endDate <= new Date("2024-01-31T20:20:00.000Z")
-                    ? new Date("2024-01-31T20:20:00.000Z")
-                    : endDate
-            }
-        })
-
-        feeDistributorInputs.push(...feeDistributorInputsForClient)
-    }
+            periods
+        }
+    })
 
     logger.info('getFeeDistributorInputs finished')
     return feeDistributorInputs
 }
 
-function squashPeriods(withoutInvoices: DepositManagerApiSession[]) {
-    const result: DepositManagerApiSession[] = [];
-    let lastUniqueCombo = null;
+async function filterManualSetup(fds: Record<string, FdWithPeriodFromApi[]>): Promise<Record<string, FdWithPeriodFromApi[]>> {
+    const proposers = await getProposers()
+    const filteredFds = {};
 
-    for (const item of withoutInvoices) {
-        const currentCombo = `${item.address}|${item.client_basis_points}`;
+    Object.entries(fds).forEach(([ethAddress, detailsArray]) => {
+        const filteredDetails = detailsArray.filter(details => {
+            const validators = details.validators;
 
-        // If the current combination is different from the last unique combination
-        if (currentCombo !== lastUniqueCombo) {
-            result.push(item); // Include this item
-            lastUniqueCombo = currentCombo; // Update last unique combination
-        } else {
-            item.pubkeys.forEach(pk => {
-                result[result.length - 1].pubkeys.add(pk)
-            })
+            const matchingProposers = Object.entries(proposers)
+              .filter(([, proposerDetails]) => proposerDetails.fee_recipient === ethAddress);
+
+            return matchingProposers.every(([pubkey]) => validators.includes(pubkey));
+        });
+
+        if (filteredDetails.length > 0) {
+            // @ts-ignore
+            filteredFds[ethAddress] = filteredDetails;
         }
-    }
+    });
 
-    return result;
+    return filteredFds
 }
+

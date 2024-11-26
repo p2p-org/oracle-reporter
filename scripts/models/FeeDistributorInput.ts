@@ -1,11 +1,9 @@
 import {FeeDistributorIdentityParams} from "./FeeDistributorIdentityParams";
+import { Period } from "./Period"
 
 export interface FeeDistributorInput {
     fdAddress: string
     identityParams: FeeDistributorIdentityParams | null
 
-    pubkeys: Set<string>
-
-    startDate: Date
-    endDate: Date
+    periods: Period[]
 }

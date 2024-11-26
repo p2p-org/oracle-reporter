@@ -1,17 +1,8 @@
-import {FeeDistributorIdentityParams} from "./FeeDistributorIdentityParams";
 import {ethers} from "ethers";
+import { FeeDistributorInput } from "./FeeDistributorInput"
 
-export interface FeeDistributorToWithdraw {
-    identityParams: FeeDistributorIdentityParams | null
-
-    address: string
-
-    pubkeys: Set<string>
-
-    startDateIso: Date
-    endDateIso: Date | null
-
+export interface FeeDistributorToWithdraw extends FeeDistributorInput {
+    amount: number
     balance: ethers.BigNumber
-
     newClientBasisPoints: number | null
 }

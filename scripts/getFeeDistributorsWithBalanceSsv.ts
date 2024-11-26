@@ -3,6 +3,7 @@ import {getBalance} from "./helpers/getBalance";
 import {ethers} from "ethers";
 import {FeeDistributorToWithdraw} from "./models/FeeDistributorToWithdraw";
 import {getP2pSsvProxyAddresses} from "./ssv/getP2pSsvProxyAddresses";
+import {getP2pSsvProxyAddresses_3_1} from "./ssv/getP2pSsvProxyAddresses_3_1";
 import {getSsvPubKeysPerProxy} from "./ssv/getSsvPubKeysPerProxy";
 import {
     getSsvFeeRecipientAddressesWithTimestampsPerProxy
@@ -15,9 +16,11 @@ export async function getFeeDistributorsWithBalanceSsv() {
         throw new Error("No MIN_BALANCE_TO_WITHDRAW_IN_GWEI in ENV")
     }
 
-    const feeDistributors: {recipientAddress: string, from: Date, to: Date | null, pubkeys: string[]}[] = []
+    const periods: {recipientAddress: string, from: Date, to: Date | null, pubkeys: string[]}[] = []
 
     const proxyAddresses = await getP2pSsvProxyAddresses()
+    const proxyAddresses_3_1 = await getP2pSsvProxyAddresses_3_1()
+    proxyAddresses.push(...proxyAddresses_3_1)
 
     for (const proxyAddress of proxyAddresses) {
         const feeRecipientAddressesWithTimestamps = await getSsvFeeRecipientAddressesWithTimestampsPerProxy(proxyAddress)
@@ -43,7 +46,10 @@ export async function getFeeDistributorsWithBalanceSsv() {
 
             for (const [otherAddress, otherTimestamp] of Object.entries(minTimestampsByRecipient)) {
                 if (otherAddress !== recipientAddress) {
-                    if (groupedByRecipientAddress[recipientAddress].to === null || otherTimestamp < groupedByRecipientAddress[recipientAddress].to!) {
+                    if (
+                      (groupedByRecipientAddress[recipientAddress].to === null && groupedByRecipientAddress[recipientAddress].from < otherTimestamp) ||
+                      (otherTimestamp < groupedByRecipientAddress[recipientAddress].to!)
+                    ) {
                         groupedByRecipientAddress[recipientAddress].to = otherTimestamp;
                     }
                 }
@@ -57,18 +63,20 @@ export async function getFeeDistributorsWithBalanceSsv() {
             pubkeys
         }))
 
-        feeDistributors.push(...feeDistributorsPerProxy)
+        periods.push(...feeDistributorsPerProxy)
     }
+
+    const now = new Date()
 
     const feeDistributorsWithBalance: FeeDistributorToWithdraw[] = []
 
-    for (const fd of feeDistributors) {
+    for (const period of periods) {
         try {
 
-            const balance = await getBalance(fd.recipientAddress)
+            const balance = await getBalance(period.recipientAddress)
             logger.info(
                 'Balance of '
-                + fd.recipientAddress
+                + period.recipientAddress
                 + ' is '
                 + ethers.utils.formatUnits(balance, "ether")
                 + 'ETH'
@@ -77,23 +85,31 @@ export async function getFeeDistributorsWithBalanceSsv() {
             if (balance.lt(ethers.utils.parseUnits(process.env.MIN_BALANCE_TO_WITHDRAW_IN_GWEI, "gwei"))) {
                 logger.info(
                     'Balance of '
-                    + fd.recipientAddress
+                    + period.recipientAddress
                     + ' is less than minimum to withdraw. Will not withdraw.'
                 )
                 continue
             }
 
-            feeDistributorsWithBalance.push({
-                address: fd.recipientAddress,
+            const existingFd = feeDistributorsWithBalance.find(f => f.fdAddress === period.recipientAddress)
+            const currentPeriod = {
+                pubkeys: period.pubkeys,
+                startDate: period.from,
+                endDate: period.to && period.from !== period.to ? period.to : now
+            }
 
-                identityParams: null,
-                pubkeys: fd.pubkeys,
-
-                startDateIso: fd.from,
-                endDateIso: fd.from !== fd.to ? fd.to : null,
-
-                balance
-            })
+            if (existingFd) {
+                existingFd.periods.push(currentPeriod)
+            } else {
+                feeDistributorsWithBalance.push({
+                    fdAddress: period.recipientAddress,
+                    identityParams: null,
+                    balance,
+                    periods: [currentPeriod],
+                    newClientBasisPoints: null,
+                    amount: 0
+                })
+            }
         } catch (error) {
             logger.error(error)
         }

@@ -1,15 +1,18 @@
-import {
-    getFeeDistributorFactoryContractSigned
-} from "./helpers/getFeeDistributorFactoryContract";
-import {FeeDistributorIdentityParams} from "./models/FeeDistributorIdentityParams";
 import {ContractTransaction} from "ethers";
 import {getNonce, incrementNonce} from "./helpers/nonce";
+import { getMatchingFactory } from "./helpers/getMatchingFactory"
+import { FeeDistributorInput } from "./models/FeeDistributorInput"
 
-export async function deployFeeDistributor(params: FeeDistributorIdentityParams) {
-    const factory = getFeeDistributorFactoryContractSigned()
+export async function deployFeeDistributor(fd: FeeDistributorInput) {
+    const params = fd.identityParams
+    if (!params) {
+      throw new Error('No identityParams')
+    }
+
+    const {factory, referenceFd} = await getMatchingFactory(fd)
 
     const tx: ContractTransaction = await factory.createFeeDistributor(
-        params.referenceFeeDistributor,
+        referenceFd,
         params.clientConfig,
         params.referrerConfig, {
             gasLimit: 300000,

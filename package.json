@@ -10,7 +10,7 @@
     "csv-parse": "5.4.0",
     "dotenv": "14.2.0",
     "ethers": "5.5.3",
-    "express": "4.19.2",
+    "express": "4.20.0",
     "fs-extra": "10.0.1",
     "log4js": "6.9.1",
     "prettier": "2.5.1",
